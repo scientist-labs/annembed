@@ -79,7 +79,7 @@ memory-stats = { version = "1.1", features = ["always_use_statm"] }
 # hnsw_rs = { git = "https://github.com/jean-pierreBoth/hnswlib-rs" }
 # hnsw_rs = { path = "../hnswlib-rs" }
 # hnsw_rs = { version = "0.3" }
-hnsw_rs = { git = "https://github.com/cpetersen/hnswlib-rs", tag = "clusterkit-0.1.0" }
+hnsw_rs = { git = "https://github.com/scientist-labs/hnswlib-rs", tag = "clusterkit-0.1.0" }
 
 
 # rand utilis
