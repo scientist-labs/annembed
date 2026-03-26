@@ -863,12 +863,20 @@ where
             return Err(String::from("range approximation failed"));
         }
         //
-        let mut b = match &self.data.data {
+        let b_raw = match &self.data.data {
             MatMode::FULL(mat) => q.t().dot(mat),
             MatMode::CSR(mat) => {
                 log::trace!("direct_svd got csr matrix");
                 transpose_dense_mult_csr(&q, mat)
             }
+        };
+        // Ensure the matrix is in standard C (row-major) layout.
+        // Operations like q.t().dot(mat) can produce Fortran-ordered arrays,
+        // which causes LAPACK SGESDD to receive an invalid lwork parameter.
+        let mut b = if b_raw.is_standard_layout() {
+            b_raw
+        } else {
+            b_raw.as_standard_layout().to_owned()
         };
         //
         let layout = MatrixLayout::C {

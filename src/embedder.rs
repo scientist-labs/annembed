@@ -287,6 +287,7 @@ where
     pub fn one_step_embed(&mut self) -> Result<usize, anyhow::Error> {
         //
         log::info!("doing 1 step embedding");
+
         self.parameters.log();
         let graph_to_embed = self.kgraph.unwrap();
         // construction of initial neighbourhood, scales and proba of edges from distances.
@@ -320,11 +321,13 @@ where
                     self.parameters.scale_rho as f32,
                     self.parameters.beta as f32,
                 ));
+
                 initial_embedding = get_dmap_embedding(
                     self.initial_space.as_ref().unwrap(),
                     self.parameters.get_dimension(),
                     None,
                 );
+
             }
 
             log::info!(
@@ -379,7 +382,9 @@ where
                 self.parameters.beta as f32,
             ));
         }
+
         let embedding_res = self.entropy_optimize(&self.parameters, &initial_embedding);
+
         // optional store dump initial embedding
         self.initial_embedding = Some(initial_embedding);
         //
@@ -431,7 +436,7 @@ where
 
     /// **return the embedded vector corresponding to original data vector corresponding to data_id**
     /// This methods fails if data_id do not exist. Use KGraph.get_data_id_from_idx to check before if necessary.
-    pub fn get_embedded_by_dataid(&self, data_id: &DataId) -> ArrayView1<F> {
+    pub fn get_embedded_by_dataid(&self, data_id: &DataId) -> ArrayView1<'_, F> {
         // we must get data index as stored in IndexSet
         let kgraph = if self.hkgraph.is_some() {
             self.hkgraph.as_ref().unwrap().get_large_graph()
@@ -443,7 +448,7 @@ where
     } // end of get_data_embedding
 
     /// **get embedding of a given node index after reindexation by the embedding to index in [0..nb_nodes]**
-    pub fn get_embedded_by_nodeid(&self, node: NodeIdx) -> ArrayView1<F> {
+    pub fn get_embedded_by_nodeid(&self, node: NodeIdx) -> ArrayView1<'_, F> {
         self.embedding.as_ref().unwrap().row(node)
     }
 
@@ -561,7 +566,7 @@ where
             Hnsw::<F, DistL2F>::new(max_nb_connection, nb_nodes, nb_layer, ef_c, DistL2F {});
         hnsw.set_keeping_pruned(true);
         // need to store arrayviews to get a sufficient lifetime to call as_slice later
-        let vectors: Vec<ArrayView1<F>> = (0..nb_nodes).map(|i| (embedding.row(i))).collect();
+        let vectors: Vec<ArrayView1<F>> = (0..nb_nodes).map(|i| embedding.row(i)).collect();
         let mut data_with_id = Vec::<(&[F], usize)>::with_capacity(nb_nodes);
         for (i, v) in vectors.iter().enumerate().take(nb_nodes) {
             data_with_id.push((v.as_slice().unwrap(), i));
@@ -685,7 +690,9 @@ where
                 mean_ratio.0 += e.weight.to_f64().unwrap() / max_edges_embedded[i].1;
             }
             mean_ratio.1 += neighbours.len();
-            first_dist.push(neighbours[0].weight.to_f64().unwrap());
+            if !neighbours.is_empty() {
+                first_dist.push(neighbours[0].weight.to_f64().unwrap());
+            }
         }
         // some stats
         let nb_without_match = nodes_match
@@ -811,9 +818,27 @@ where
                 " initial_space not constructed, no NodeParams",
             ));
         }
+
+        // If the initial embedding has fewer columns than asked_dim (e.g. SVD returned fewer
+        // components), we must update the parameters to match the actual dimension to avoid
+        // index-out-of-bounds panics when accessing embedded vectors.
+        let actual_dim = initial_embedding.ncols();
+        let mut effective_params;
+        let params_ref = if actual_dim < params.asked_dim {
+            log::warn!(
+                "Initial embedding has {} dimensions, less than asked {} — adjusting",
+                actual_dim,
+                params.asked_dim
+            );
+            effective_params = params.clone();
+            effective_params.asked_dim = actual_dim;
+            &effective_params
+        } else {
+            params
+        };
         let mut ce_optimization = EntropyOptim::new(
             self.initial_space.as_ref().unwrap(),
-            params,
+            params_ref,
             initial_embedding,
         );
         // compute initial value of objective function
@@ -878,7 +903,7 @@ where
         };
         log::info!(" final cross entropy value {:.2e}", final_ce);
         // return reindexed data (if possible)
-        let dim = self.get_asked_dimension();
+        let dim = params_ref.asked_dim;
         let nbrow = self.get_nb_nodes();
         let mut reindexed = Array2::<F>::zeros((nbrow, dim));
         // TODO version 0.15 provides move_into and push_row
