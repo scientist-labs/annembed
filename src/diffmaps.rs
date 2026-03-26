@@ -1026,7 +1026,17 @@ where
     // As we used a laplacian and probability transitions we eigenvectors corresponding to lower eigenvalues
     let lambdas = svd_res.get_sigma().as_ref().unwrap();
     // singular vectors are stored in decrasing order according to lapack for both gesdd and gesvd.
-    if lambdas.len() > 2 && lambdas[1] > lambdas[0] {
+    if lambdas.len() < 3 {
+        log::error!(
+            "SVD returned only {} eigenvalues, need at least 3 for embedding",
+            lambdas.len()
+        );
+        panic!(
+            "SVD returned only {} eigenvalues, need at least 3. Try reducing n_components or increasing n_neighbors.",
+            lambdas.len()
+        );
+    }
+    if lambdas[1] > lambdas[0] {
         panic!("svd spectrum not decreasing");
     }
     // we examine spectrum
@@ -1055,7 +1065,10 @@ where
             u.ncols()
         );
     }
-    let real_dim = asked_dim.min(u.ncols());
+    // We access columns 1..real_dim+1 (skipping the first eigenvector), so we need
+    // u.ncols() >= real_dim + 1 and lambdas.len() >= real_dim + 1
+    let max_usable = (u.ncols().saturating_sub(1)).min(lambdas.len().saturating_sub(1));
+    let real_dim = asked_dim.min(max_usable);
     // we can get svd from approx range so that nrows and ncols can be number of nodes!
     let mut embedded = Array2::<F>::zeros((u.nrows(), real_dim));
     // according to theory (See Luxburg or Lafon-Keller diffusion maps) we must go back to eigen vectors of rw laplacian.

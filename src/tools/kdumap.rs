@@ -142,7 +142,13 @@ where
     //
     for neighbour in neighbours {
         let y_i = neighbour.node; // y_i is a NodeIx = usize
-        rho_y_s.push(kgraph.get_neighbours()[y_i][0].weight.to_f32().unwrap());
+        let y_neighbours = &kgraph.get_neighbours()[y_i];
+        if !y_neighbours.is_empty() {
+            rho_y_s.push(y_neighbours[0].weight.to_f32().unwrap());
+        } else {
+            // Fallback: use this node's own nearest distance if neighbor has no neighbors
+            rho_y_s.push(rho_x);
+        }
     } // end of for i
       //
     rho_y_s.push(rho_x);

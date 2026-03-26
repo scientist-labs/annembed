@@ -22,6 +22,7 @@ lazy_static! {
 }
 
 // install a logger facility
+#[allow(dead_code)]
 fn init_log() -> u64 {
     let _res = env_logger::try_init();
     log::info!("\n ************** initializing logger *****************\n");
